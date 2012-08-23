@@ -1,0 +1,297 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{url}
+\usepackage{tikz}
+\title{Are there Consistent and Simple Biases Between the Wave 1 and Wave 2 HbA1C Measures}
+\author{Forest Gregg}
+\pgfrealjobname{bias}
+\usepackage[nogin]{Sweave}
+\SweaveOpts{echo=F, width=4.5, height=4.75, prefix.string=/home/fgregg/diabetes/sweave-cache/figs/fig, cache=T, results=hide, keep.source=F}
+<<preamble, cache=FALSE>>=
+setwd('/home/fgregg/diabetes/analyses')
+setCacheDir('/home/fgregg/diabetes/sweave-cache/values')
+library(xtable)
+@ 
+
+<<head>>=
+library(plotrix)
+library(multcomp)
+@ 
+
+<<loadData, cache=T>>=
+source('loadData.R')
+complete <- loadData()
+@ 
+
+<<subGroupFunctions>>=
+
+# Gender
+#
+# Wave 1
+
+a1cByGenderPlot <- function(diabetes.measure) {
+
+  female.a1c <- complete[complete$gender=="female", diabetes.measure]
+  male.a1c <- complete[complete$gender=="male", diabetes.measure]
+  
+  par(mfrow=c(2,2))
+
+  brks = seq(3.5, 15, 0.5)
+  hist(female.a1c,
+       breaks=brks,
+       main="Female",
+       xlab="HbA1C")
+  hist(male.a1c,
+       breaks=brks,
+       main="Male",
+       xlab="HbA1C")
+  
+  multhist(list(female.a1c,
+                male.a1c),
+           breaks=brks,
+           probability=TRUE,
+           main="Female/Male",
+           xlab="HbA1C midpoints",
+           ylab="Density")
+
+  par(mfrow=c(1,1))
+}
+  
+a1cByGenderFiveNumsTable <- function(diabetes.measure, label) {
+  
+  female.nums <- summary(complete[complete$gender=="female",
+                                  diabetes.measure])
+  male.nums <- summary(complete[complete$gender=="male",
+                                diabetes.measure])
+  
+  fivenum <- xtable(rbind(female.nums, male.nums),
+                    caption=paste(paste("Summary Statistics for", label), 
+                                  ", By Gender", sep=""))
+  rownames(fivenum) <- c("Female", "Male")
+  names(fivenum) <- c( "Min.",
+                      "1st Qu.",
+                      "Median",
+                      "Mean",
+                      "3rd Qu.",
+                      "Max.",
+                      "N")
+  fivenum$N <- c(sum(!is.na(complete[complete$gender=="female", 
+                                     diabetes.measure])),
+                 sum(!is.na(complete[complete$gender=="male", 
+                                     diabetes.measure])))
+  
+  digits(fivenum) <- c(0,2,2,2,2,2,2,0)
+  print(fivenum)
+}
+
+a1cByEthnicPlot <- function(diabetes.measure){ 
+  white.a1c <- complete[complete$ethgrp=="white", diabetes.measure]
+  black.a1c <- complete[complete$ethgrp=="black", diabetes.measure]
+  hispanic.a1c <- complete[complete$ethgrp=="hispanic, non-black", diabetes.measure]
+  other.a1c <- complete[complete$ethgrp=="other", diabetes.measure]
+  na.a1c <- complete[is.na(complete$ethgrp), diabetes.measure]
+  
+  par(mfrow=c(2,2))
+
+  brks = seq(3.5, 15, 0.5)
+  hist(white.a1c,
+       breaks=brks,
+       main="White",
+       xlab="HbA1C")
+  hist(black.a1c,
+       breaks=brks,
+       main="Black",
+       xlab="HbA1C")
+  hist(black.a1c,
+       breaks=brks,
+       main="Hispanic Non-Black",
+       xlab="HbA1C")
+  hist(other.a1c,
+       breaks=brks,
+       main="Other",
+       xlab="HbA1C")
+}
+
+a1cByEthnicFiveNumsTable <- function(diabetes.measure, label) {
+  
+  white.nums <- summary(complete[complete$ethgrp=="white", diabetes.measure])
+  black.nums <- summary(complete[complete$ethgrp=="black", diabetes.measure])
+  hispanic.nums <- summary(complete[complete$ethgrp=="hispanic, non-black", diabetes.measure])
+  other.nums <- summary(complete[complete$ethgrp=="other", diabetes.measure])
+  na.nums <- summary(complete[is.na(complete$ethgrp), diabetes.measure])
+  
+  fivenum <- xtable(rbind(white.nums,
+                          black.nums,
+                          hispanic.nums,
+                          other.nums,
+                          na.nums),
+                    caption=paste(paste("Summary Statistics for", label), 
+                                  ", By Ethnic Group", sep=""))
+  rownames(fivenum) <- c("White", 
+                         "Black",
+                         "Hispanic, Non-Black",
+                         "Other",
+                         "Missing")
+  names(fivenum) <- c( "Min.",
+                      "1st Qu.",
+                      "Median",
+                      "Mean",
+                      "3rd Qu.",
+                      "Max.",
+                      "N")
+  fivenum$N <- c(sum(!is.na(complete[complete$ethgrp=="white", 
+                                     diabetes.measure])),
+                 sum(!is.na(complete[complete$ethgrp=="black", 
+                                     diabetes.measure])),
+                 sum(!is.na(complete[complete$ethgrp=="hispanic, non-black", 
+                                     diabetes.measure])),
+                 sum(!is.na(complete[complete$ethgrp=="other", 
+                                     diabetes.measure])),
+                 sum(is.na(complete[is.na(complete$ethgrp),
+                                    diabetes.measure])))
+  
+  digits(fivenum) <- c(0,2,2,2,2,2,2,0)
+  print(fivenum)
+}
+
+
+@
+
+\begin{document}
+
+\section{Gender}
+\subsection{Wave 1}
+
+<<Wave1GenderFigs, fig=T>>=
+a1cByGenderPlot("w1.hba1c.whole")
+@ 
+
+<<Wave1GenderFiveNum, results=tex, cache=F>>=
+a1cByGenderFiveNumsTable("w1.hba1c.whole", "Wave 1 HbA1C")
+@ 
+
+<<Wave1GenderTtest>>= 
+w1.gender.t.test <- t.test(w1.hba1c.whole ~ gender, complete)
+@  
+
+The difference between the means of female and male HbA1C measures in
+Wave 1 is statistically significant at the 95\% confidence level
+according to a Welch Two sample t-test (p value
+$=\Sexpr{round(w1.gender.t.test$p.value,2)}$).
+
+
+\subsection{Wave 2}
+
+<<Wave2GenderFigs, fig=T>>=
+a1cByGenderPlot("w2.hba1c.whole")
+@ 
+
+<<Wave2GenderFiveNum, results=tex, cache=F>>=
+a1cByGenderFiveNumsTable("w2.hba1c.whole", "Wave 2 HbA1C")
+@ 
+
+<<Wave1GenderTtest>>= 
+w2.gender.t.test <- t.test(w2.hba1c.whole ~ gender, complete)
+@  
+
+The difference between the means of female and male HbA1C measures in
+Wave 2 fails to reach statistically significance at the 95\%
+confidence level according to a Welch Two sample t-test (p value
+$=\Sexpr{round(w2.gender.t.test$p.value,2)}$).
+
+\section{Ethnicity}
+\subsection{Wave 1}
+
+<<Wave1A1CEthnicHists, fig=TRUE>>=
+a1cByEthnicPlot("w1.hba1c.whole")
+@ 
+
+<<Wave1A1CEthnixBoxPlot, fig=TRUE>>=
+boxplot(w1.hba1c.whole ~ ethgrp, 
+        complete, 
+        horizontal=TRUE, 
+        at=4:1, 
+        yaxt="n",
+        varwidth=TRUE,
+        xlab = "HbA1C")
+axis(2, at=4:1, labels=c("White","Black","Hispanic","Other"))
+@ 
+
+<<Wave1EthnicFiveNum, results=tex, cache=F>>=
+a1cByEthnicFiveNumsTable("w1.hba1c.whole", "Wave 1 HbA1C")
+@ 
+
+According to the Tukey-Kramer multiple comparison t-test, the differences in means between the HbA1C measures of blacks and whites and Hispanics and whites are statistically significant at the 95\% confidence level (Table \ref{table:w1.ethnic}). Other group differences fail to reach statistical significance.
+<<t.tests, results=tex, cache=F>>=
+lmod <- lm(w1.hba1c.whole ~ ethgrp, complete)
+mult.ethnic <- summary(glht(lmod, linfct=mcp(ethgrp= "Tukey")))
+
+mult.ethnic.table <- cbind(mult.ethnic$test$coefficients,
+                           mult.ethnic$test$sigma,
+                           mult.ethnic$test$tstat,
+                           mult.ethnic$test$pvalues)
+tab <- xtable(mult.ethnic.table, align="lrrrr", caption="Multiple Comparisons of Means: Tukey Contrasts, Wave 1 HbA1C by Ethnic Group", label="table:w1.ethnic")
+colnames(tab) <- c("Estimate", "Std. Error", "t value", "Pr(>|z|)")
+
+print(tab)
+@ 
+
+\subsection{Wave 2}
+
+<<Wave2A1CEthnicHists, fig=TRUE>>=
+a1cByEthnicPlot("w2.hba1c.whole")
+@ 
+
+<<Wave2A1CEthnixBoxPlot, fig=TRUE>>=
+boxplot(w2.hba1c.whole ~ ethgrp, 
+        complete, 
+        horizontal=TRUE, 
+        at=4:1, 
+        yaxt="n",
+        varwidth=TRUE,
+        xlab = "HbA1C")
+axis(2, at=4:1, labels=c("White","Black","Hispanic","Other"))
+@ 
+
+<<Wave2EthnicFiveNum, results=tex, cache=F>>=
+a1cByEthnicFiveNumsTable("w2.hba1c.whole", "Wave 2 HbA1C")
+@ 
+
+According to the Tukey-Kramer multiple comparison t-test, the
+differences in means between the HbA1C measures of different ethnic groups were statistically at the 95\%
+confidence level for all pairs of groups except other-white and other-hispanic, non black (Table \ref{table:w2.ethnic}). 
+
+<<t.tests2, results=tex, cache=F>>=
+lmod <- lm(w2.hba1c.whole ~ ethgrp, complete)
+mult.ethnic <- summary(glht(lmod, linfct=mcp(ethgrp= "Tukey")))
+
+mult.ethnic.table <- cbind(mult.ethnic$test$coefficients,
+                           mult.ethnic$test$sigma,
+                           mult.ethnic$test$tstat,
+                           mult.ethnic$test$pvalues)
+tab <- xtable(mult.ethnic.table, align="lrrrr", caption="Multiple Comparisons of Means: Tukey Contrasts, Wave 2 HbA1C by Ethnic Group", label="table:w2.ethnic")
+colnames(tab) <- c("Estimate", "Std. Error", "t value", "Pr(>|z|)")
+
+print(tab)
+@ 
+
+
+\end{document}
+
+
+  
+  multhist(list(female.a1c,
+                male.a1c),
+           breaks=brks,
+           probability=TRUE,
+           main=paste("Female/Male, ", label),
+           xlab="HbA1C midpoints",
+           ylab="Density")
+
+  par(mfrow=c(1,1))
+}
+
+
+
+
+# Insert some language about difference in means

@@ -1,0 +1,653 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{url}
+\usepackage{endnotes}
+\usepackage{tikz}
+\usepackage{subfigure}
+\usepackage{rotating}
+\pgfrealjobname{prelim}
+\usepackage[nogin]{Sweave}
+\SweaveOpts{echo=F, width=4.5, height=4.75, prefix.string=/home/fgregg/diabetes/sweave-cache/figs/fig, cache=T, results=hide, keep.source=F}
+<<preamble, cache=FALSE>>=
+setwd('/home/fgregg/diabetes/analyses')
+setCacheDir('/home/fgregg/diabetes/sweave-cache/values')
+#pdf.options(maxRaster=256)
+#options(SweaveHooks=list(fig=function()
+#          par(mar=c(1.1, 1.1, 1.1, 1.1))))
+@ 
+
+<<setUp, echo=FALSE, cache=F>>=
+library(foreign)
+library(xtable)
+library(reshape)
+grandMedianCenter <- function(x) {
+  return(x - median(na.omit(x)))
+}
+
+grandMeanCenter <- function(x) {
+  return(x - mean(na.omit(x)))
+}
+
+
+fm <- function(x) {
+  format(x, big.mark = ",", digits=2)
+}
+
+lappend <- function(lst, obj) {
+    lst[[length(lst)+1]] <- obj
+    return(lst)
+}
+
+plotOverlap <- function(df, x, group.factor, group.variables) {
+    df <- df[!is.na(df[, x]),]
+    densities <- list()
+    total.range <- range(df[, x])
+    total.n <- length(df[, x])
+    max.d.all <- 0
+    for (group.var in group.variables) {
+        d <- density(df[df[, group.factor] == group.var &
+                        !is.na(df[, group.factor]), x], bw="sj-dpi")
+        max.d <- max(d$y * d$n/total.n)
+        if (max.d > max.d.all) {
+            max.d.all <- max.d
+        }
+        densities = lappend(densities,d)
+    }
+    plot(total.range,
+         c(0, max.d.all),
+         type="n",
+         xlab=x,
+         ylab="Relative Distribution")
+    for (d in densities) {
+        polygon(d$y * d$n/total.n ~ d$x,
+                col=rgb(runif(1),
+                runif(1),
+                runif(1),
+                    .2))
+    }
+}
+@
+
+<<loadData, echo=F, cache=T>>=
+source('loadData.R')
+complete <- loadData()
+a1c.long <- longData(complete)
+@ 
+
+
+\begin{document}
+\textbf{Executive Summary}: Respondents with diabetes at wave 1 were
+more likely to have died before wave 2. Conditional on being diagnosed
+with diabetes, HbA1C levels do not appear correlated with likelihood
+of dying. Of the respondents who participated in both waves, the
+average respondent had declining HbA1C measures between
+waves; diabetes status changes the average rate, but the average
+change is always a decline.
+
+\section{Preliminary Longitudinal Analyses}
+As we are interested in how diabetes changes or how diabetes affects
+health, we start by seeing if respondents who reported diabetes at
+the first wave were less likely to survive and participate in the
+second wave of interviewing. We are here interested in death as an
+outcome and in selection effects that could bias the measured changes
+in health between waves.
+
+\subsection{Survival to Wave 2}
+Of the \Sexpr{fm(dim(complete)[1])} Wave 1 respondents, NSHAP was able
+to interview \Sexpr{fm(sum(complete$w2.status == "Participated"))} in Wave 2. The remaining \Sexpr{sum(complete$w2.status != "Participated")} had either died, were too sick, refused to respond,
+or were unavailable for other reasons. 
+
+<<participation, echo=FALSE, results=tex, cache=F>>=
+disposition.tab <- xtable(table(complete$w2.status), 
+                          align = c("l", "r"),
+                          caption = "Disposition of Wave 1 Respondents at Wave 2" )
+names(disposition.tab) <- "Wave 2 Disposition"
+print(disposition.tab)
+@
+
+\subsection{Differential Survival to Wave 2}
+\subsubsection{Diabetes Status}
+As we might expect, respondents who had diabetes at the first wave
+were more likely to die before participating in the second wave. We
+have a few ways of deciding if someone has diabetes, and we'll use two
+here. Regardless of how we define diabetes, we will see that a
+respondent who had diabetes at Wave 1 was about 1.6 times more likely
+to die by Wave 2.
+
+
+First, we can compare respondents who self reported having diabetes or
+high blood sugar to those who said they did not (Table \ref{table:diagnosis}).\footnote{{\tt Has a
+  medical doctor ever told you that you have any of the following
+  conditions: Diabetes or high blood sugar? (PROMPT: Medical doctors
+  include specialists such as dermatologists, psychiatrists,
+  ophthalmologists, as well as general practitioners and osteopaths.
+  Do not include chiropractors, dentists, nurses, or nurse
+  practitioners.)}
+}
+
+<<diabetesStatus1, echo=FALSE, results=tex, cache=F>>=
+tab2 <- table(complete$w1.diagnosed.diabetes,
+              complete$w2.status,
+              useNA = "ifany")
+tab2 <- prop.table(tab2, margin=1)
+tab2 <- as.table(cbind(tab2, N=table(complete$w1.diagnosed.diabetes))) 
+row.names(tab2) <- c("Undiagnosed", "Diagnosed")
+
+xtab2 <- xtable(tab2, 
+             caption="Disposition of Diagnosed and Undiagnosed Wave 1 Respondents at Wave 2 - Self Reported Diabetes",
+             label="table:diagnosis")
+digits(xtab2)[dim(xtab2)[2]+1] <- 0
+print(xtab2)
+
+@
+
+Alternatively, we could say that a respondents who did not report
+being diagnosed with diabetes, but who has a high HbA1C level has
+\emph{undiagnosed} diabetes. We can then split the respondents into
+those who have diabetes and those who do not. We put respondents into
+the diabetes group if they a.) self report a diagnosis of diabetes or
+high blood sugar or b.) they have a HbA1C level above 6.5. Only a
+random subsample of respondents were tested for HBA1C (N=\Sexpr{fm(sum(!is.na(complete$w1.hba1c_flag)))}). Of this subsample, only \Sexpr{fm(sum(!is.na(complete$w1.hba1c)))} of the blood samples were able to be processed. We will compare
+the diabetic and nondiabetic groups within this sub-subsample (Table \ref{table:diabetic}).
+
+<<diabetesStatus3, echo=FALSE, results=tex, cache=F>>=
+tab2 <- with(complete[!is.na(complete$w1.hba1c),], {
+  table(w1.diagnosed.diabetes == "yes" | w1.hba1c > 6.5,
+        w2.status)
+  }
+             )
+tab2 <- prop.table(tab2, margin=1)
+tab2 <- with(complete[!is.na(complete$w1.hba1c),], {
+  as.table(cbind(tab2, N=table(w1.diagnosed.diabetes == "yes" | w1.hba1c > 6.5)))
+  }
+             )
+
+row.names(tab2) <- c("Nondiabetic", "Diabetic")
+xtab2 <- xtable(tab2, 
+             caption="Disposition of Diabetic and Nondiabetic Wave 1 Respondents at Wave 2 - Self Reported Diabetes",
+             label="table:diabetic")
+digits(xtab2)[dim(xtab2)[2]+1] <- 0
+print(xtab2)
+@
+
+\subsubsection{HbA1C}
+We should also look to see whether respondents with higher A1C levels
+at Wave 1 were more likely to have died by Wave 2. We can model
+surviving to wave 2 as binary outcome and estimate the relation
+between first wave HbA1c and survival using logistic regression. 
+
+If we only use HbA1c as predictor, we do find that respondents with
+higher levels of HbA1c are more likely to have died by the second wave
+of NSHAP. We should expect this because the respondents who report a
+diagnoses of diabetes tend to have higher levels of HbA1c (Figure
+\ref{fig:hba1cDiagnosesPlot}) and we already saw that respondents who
+reported a diabetes diagnosis had a higher likelihood of dying.
+
+\begin{figure}[!h]
+<<hba1cPlot, fig=TRUE>>=
+plot(w1.hba1c ~ w1.diagnosed.diabetes, 
+     complete,
+     ylab="HbA1C Level1",
+     xlab="Diagnosed with Diabetes or High Blood Sugar",
+     xaxt="n")
+
+axis(1, at=c(1,2), labels=c("No", "Yes"))
+@ 
+\label{fig:hba1cDiagnosesPlot}
+\caption{HbA1C Levels by Diagnoses at Wave 1}
+\end{figure}
+
+<<mortalityVsA1C, results=tex, cache=F>>=
+#a1c.death.model.1 <- glm(w2.survived ~ grandMedianCenter(w1.hba1c),
+#                         complete,
+#                         family=binomial)
+a1c.death.model.2 <- glm(w2.survived ~ grandMedianCenter(w1.hba1c)*w1.diagnosed.diabetes,
+                         complete,
+                         family=binomial)
+
+
+reg1.tab <- xtable(summary(a1c.death.model.2),
+                   caption="Estimated Effects on Log Odds of Surviving to Wave 2, HBA1C has been Grand Median Centered",
+                   label="table:hba1cmortal")
+row.names(reg1.tab) <- c("(Intercept)",
+                         "HbA1C",
+                         "Diagnosed Diabetes",
+                         "HbA1C:Diagnosed Diabetes")
+print(reg1.tab)
+@
+
+If we look at the relation between HbA1C and death within the
+respondents who were diagnosed with diabetes, we find no evidence that
+respondents with higher HbA1C levels were more likely to die. To put
+in another way, once we know whether a respondent reported being
+diagnosed with diabetes, knowing their HbA1C level does not help us
+predict whether the respondent survives (Table \ref{table:hba1cmortal}). 
+
+
+
+This surprised me. At the least, I expected that a diabetic with poor
+control would be more likely to die. First, I checked to make sure
+that splitting the respondents by diagnoses did not select out all
+variance. It does not. Second, I checked for a quadratic relation
+between HbA1C and mortality, which has been reported in some of the
+literature. There was no real evidence for a U shaped
+association. Controlling for age had no effect. Finally, given that
+the distribution of HbA1C seems to be roughly log normal, I tried a
+log transform of HbA1C. This made no difference.
+
+
+<<mortalityVsA1Cdiscrete, results=tex, cache=F>>=
+a1c.death.model.3 <- glm(w2.survived ~ w1.hba1c.discrete*w1.diagnosed.diabetes,
+                         complete,
+                         family=binomial)
+
+
+reg1.tab <- xtable(summary(a1c.death.model.3),
+                   caption="Estimated Effects on Log Odds of Surviving to Wave 2, HBA1C Levels",
+                   label="table:hba1cDiscrete")
+row.names(reg1.tab) <- c("(Intercept)",
+                         "HbA1C, [6, 7)",
+                         "HbA1C, [7, 8)",
+                         "HbA1C, [8, 9)",
+                         "HbA1C, [9, 10)",
+                         "HbA1C, [10, 11)",
+                         "HbA1C, [11, Inf)",
+                         "Diagnosed Diabetes",
+                         "Diagnosed Diabetes:HbA1C, [6, 7)",
+                         "Diagnosed Diabetes:HbA1C, [7, 8)",
+                         "Diagnosed Diabetes:HbA1C, [8, 9)",
+                         "Diagnosed Diabetes:HbA1C, [9, 10)",
+                         "Diagnosed Diabetes:HbA1C, [10, 11)",
+                         "Diagnosed Diabetes:HbA1C, [11, Inf)")
+
+
+                         print(reg1.tab)
+@
+
+
+We can also try splitting HbA1C into seven levels.  If we do so, we
+find that respondents that have not been diagnosed with diabetes and
+who have HbA1C levels within $[6, 7)$ do were more likely to die than
+non-diagnosed respondents with lower HbA1C levels (Table
+\ref{table:hba1cDiscrete}). The \emph{marginal} p value of this
+difference is significant at the $0.05$ level, but by splitting the
+HbA1C measure into levels, we are effectively making multiple
+comparisons, so we need to adjust the p values accordingly.
+
+<<multiComp, results=tex, cache=F>>=
+library(multcomp)
+mult.Hba1c <- summary(glht(a1c.death.model.3, 
+                          linfct = mcp(w1.hba1c.discrete = "Dunnett")),
+                     test = adjusted(type="Shaffer"))
+mult.Hba1c.table <- cbind(mult.Hba1c$test$coefficients,
+                          mult.Hba1c$test$sigma,
+                          mult.Hba1c$test$tstat,
+                          mult.Hba1c$test$pvalues)
+tab <- xtable(mult.Hba1c.table, align="lrrrr", caption="Multiple Comparisons of Means: Dunnett Contrasts")
+colnames(tab) <- c("Estimate", "Std. Error", "z value", "Pr(>|z|)")
+rownames(tab) <- c("HbA1c, [0,6) = HbA1C, [6, 7)",
+                   "HbA1c, [0,6) = HbA1C, [7, 8)",
+                   "HbA1c, [0,6) = HbA1C, [8, 9)",
+                   "HbA1c, [0,6) = HbA1C, [9, 10)",
+                   "HbA1c, [0,6) = HbA1C, [10, 11)",
+                   "HbA1c, [0,6) = HbA1C, [11, Inf)")
+print(tab)
+@ 
+
+Using Shaffer's procedure for adjusting logically related hypotheses and a dose-response contrast, the adjusted p value of the marginally significant group difference is \Sexpr{fm(tab[1,4])}.
+
+
+
+
+
+
+\newpage
+\subsection{Changes in Diabetes Status}
+Next, we look at changes in diabetes between waves. First let's look
+at changes in how respondents answered the question about whether they
+had ever been diagnosed diabetes or high blood sugar 
+
+<<diagnosesTable, echo=FALSE, cache=F, results=tex, eval=TRUE>>=
+tab1 <- with(complete[complete$w2.status == "Participated",], {
+  table(factor(w1.diagnosed.diabetes),
+        factor(w2.diagnosed.diabetes),
+        useNA = "ifany")
+})
+p.tab1 <- prop.table(tab1, margin=1)
+N.1 = with(complete[complete$w2.status == "Participated",], {
+  table(factor(w1.diagnosed.diabetes))
+})
+N.2 = with(complete[complete$w2.status == "Participated",], {
+  table(factor(w2.diagnosed.diabetes))
+})[1:2]
+
+p.tab1 <- p.tab1[,1:2]
+p.tab1 <- as.table(cbind(p.tab1, N.1))
+p.tab1 <- as.table(rbind(p.tab1, c(t(N.2), NA)))
+row.names(p.tab1) <- c("No, Wave 1", "Yes, Wave 1", "N")
+colnames(p.tab1) <- c("No, Wave 2", "Yes, Wave 2", "N")
+xtab1 <- xtable(p.tab1, 
+                caption="Changes in Self Reported Diabetes Diagnosis",
+                label="table:diagnosischange")
+digits(xtab1) <- rbind(c(0,2,2,0), 
+                       c(0,2,2,0), 
+                       c(0,0,0,0))
+print(xtab1)
+                
+@
+
+At Wave 2, respondents who had been part of Wave 1 were asked the
+following question: {\tt SINCE YOUR LAST INTERVIEW, HAS A DOCTOR TOLD
+  YOU THAT YOU HAVE diabetes Melitus or high blood sugar?} When we
+compare the responses to this question to analogous question in wave
+1, we find \Sexpr{fm(tab1[1,2])} respondents reported a new diagnosis
+of diabetes since the first wave. On the other hand,
+\Sexpr{fm(tab1[2,1])} respondents who reported having been diagnosed
+with diabetes at Wave 1 said they had not been told by a doctor that
+they had diabetes since Wave 1. It is not clear how to interpret
+this. Did these respondents forget being diagnosed, or did they think
+they were being asked about changes in diabetes status?
+
+
+
+
+\subsection{Changes in HbA1C}
+Finally, we look at changes in HbA1C levels. We have
+\Sexpr{fm(sum(!is.na(complete$w1.hba1c) & !is.na(as.numeric(as.character(complete$w2.a1c.whole)))))}
+respondents for whom we have HbA1C measures at both waves. We are
+going to be interested in looking at changes in HbA1C for three
+subgroups: Wave 1 diagnosed diabetics, Wave 1 undiagnosed diabetics,
+and Wave 1 nondiabetics. Undiagnosed diabetics are respondents who
+said they had not been told they had diabetes or high blood sugar but
+who had A1C levels above 6.5. Further, we will also look at the
+relations between HbA1C being diagnosed between waves.
+
+
+<<descriptiveLM, eval=TRUE, echo=FALSE, cache=F, results=tex>>=
+desc.model <- lm(a1c ~ I(wave-1)*wave.1.diabetes.status*interim.diagnosed, data=a1c.long)
+
+nondiabetics.no.change <- c(coef(desc.model)[1], 
+                            coef(desc.model)[1] 
+                            + coef(desc.model)[2])
+
+nondiabetics.change <- c((coef(desc.model)[1]
+                          + coef(desc.model)[5]),
+                         (coef(desc.model)[1]
+                          + coef(desc.model)[5]
+                          + coef(desc.model)[2]
+                          + coef(desc.model)[8])
+                         )
+
+diag.diabetics.no.change <- c((coef(desc.model)[1] 
+                               + coef(desc.model)[3]), 
+                              (coef(desc.model)[1] 
+                               + coef(desc.model)[3]
+                               + coef(desc.model)[2] 
+                               + coef(desc.model)[6])
+                              )
+                         
+undiag.diabetics.no.change <- c((coef(desc.model)[1] 
+                                 + coef(desc.model)[4]), 
+                                 (coef(desc.model)[1] 
+                                  + coef(desc.model)[4]
+                                  + coef(desc.model)[2] 
+                                  + coef(desc.model)[7])
+                                )
+
+undiag.diabetics.change <- c((coef(desc.model)[1]
+                              + coef(desc.model)[4]
+                              + coef(desc.model)[5]
+                              + coef(desc.model)[10]),
+                             (coef(desc.model)[1] 
+                              + coef(desc.model)[4]
+                              + coef(desc.model)[5]
+                              + coef(desc.model)[10]
+                              + coef(desc.model)[2] 
+                              + coef(desc.model)[7]
+                              + coef(desc.model)[8] 
+                              + coef(desc.model)[12])
+                             )
+                         
+hba1c.change <- xtable(rbind(nondiabetics.no.change,
+                             nondiabetics.change,
+                             undiag.diabetics.no.change,
+                             undiag.diabetics.change,
+                             diag.diabetics.no.change),
+                       caption="Average HbA1C levels by Wave 1 Diabetes Status and Interim Diagnosis")
+
+row.names(hba1c.change) <- c("Nondiabetics, Interim Diagnosis - N",
+                             "Nondiabetics, Interim Diagnosis - Y",
+                             "Undiagnosed Diabetics, Interim Diagnosis - N",
+                             "Undiagnosed Diabetics, Interim Diagnosis - Y",
+                             "Diagnosed Diabetics")
+
+colnames(hba1c.change) <- c("Wave 1 HbA1C", "Wave 2 HbA1C")
+
+print(hba1c.change)
+                           
+             
+@ 
+
+
+\section{Additional Analyses}
+Let's compare the distribution of HbA1C measures across waves. We'll
+can start by comparing the estimated probability densities of the
+distribution, which are very much like smoothed histograms.
+
+First, let's compare all the HbA1C measures collected in the first
+wave and all the HbA1C measures collected in the second wave. Note
+that the respondents are not the same across the waves because or
+replacement due to death or other non-response. As we can see in
+Figure \ref{fig:allDensity}, the density in Wave 2 peaks a little
+below the density in Wave 1.
+
+\begin{figure}
+  \centering
+<<fig=TRUE, echo=FALSE>>=
+w1.density <- density(na.omit(complete$w1.hba1c), bw="sj-dpi")
+
+w2.a1c <- na.omit(as.numeric(as.character(complete$w2.a1c.dried)))
+w2.density <- density(w2.a1c, bw="sj-dpi")
+
+
+x.min = min(w1.density$x, w2.density$x)
+x.max = max(w1.density$x, w2.density$x)
+
+y.max = max(w1.density$y, w2.density$y)
+
+plot(c(x.min, x.max), c(0, y.max), type="n", 
+     main="HbA1C by Wave, All Data",
+     xlab="HbA1C",
+     ylab="Density")
+
+
+polygon(w1.density, col=rgb(1,0,0,.2))
+
+polygon(w2.density, col=rgb(0,0,1,.2))
+@ 
+\caption{HbA1C density by Wave. The red curve is the estimated density of Wave 1 respondents, the blue curve is the density for Wave 2 respondents. The overlap is purple.}
+\label{fig:allDensity}
+\end{figure}
+
+Now, let's look at the densities for the subsample of respondents that
+participated in both waves (Figure \label{fig:subsampleDensity}). The
+pattern is much the same.
+
+\begin{figure}
+  \centering
+<<fig=TRUE, echo=FALSE>>=
+w1.density <- density(na.omit(a1c.long[a1c.long$wave == 1, "a1c"], 
+                      bw="sj-dpi"))
+w2.density <- density(na.omit(a1c.long[a1c.long$wave == 2, "a1c"], 
+                      bw="sj-dpi"))
+
+x.min = min(w1.density$x, w2.density$x)
+x.max = max(w1.density$x, w2.density$x)
+
+y.max = max(w1.density$y, w2.density$y)
+
+plot(c(x.min, x.max), c(0, y.max), type="n", 
+     main="HbA1C by Wave, Longitudinal Subsample",
+     ylab="Density",
+     xlab="HbA1C")
+
+
+polygon(w1.density, col=rgb(1,0,0,.2))
+
+polygon(w2.density, col=rgb(0,0,1,.2))
+@ 
+\caption{HbA1C density by Wave for respondents who appear in both waves. The red curve is the estimated density of Wave 1 respondents, the blue curve is the density for Wave 2 respondents. The overlap is purple.}
+\label{fig:subsampleDensity}
+\end{figure}
+
+Next, let's regress HbA1C across waves (Table \ref{table:model.1}).
+When we do this we find that, on average, a respondent's Wave 2 HbA1C
+that there appears to be significant shrinkage. While the means of the
+distributions are nearly identical (6.04 versus about 6.00), on
+average a respondent's Wave 2 HbA1C was two thirds of the distance of
+their Wave 1 HbA1C measure from the Wave 1 mean. We should expect some
+shrinkage due to `regression to the mean.'
+
+<<echo=F>>=
+two.measures <- complete[, c("w2.a1c.dried", "w1.hba1c")]
+two.measures$w2.a1c.dried <- as.numeric(as.character(two.measures$w2.a1c.dried))
+two.measures <- two.measures[!is.na(two.measures$w2.a1c.dried),] 
+
+model.1 <- lm(w2.a1c.dried ~ grandMeanCenter(w1.hba1c) + I(grandMeanCenter(w1.hba1c)^2),
+              data=two.measures)
+@ 
+
+<<results=tex, cache=F>>=
+model.1.tab <- xtable(summary(model.1),
+                      caption="Predictors of Wave 2 HbA1C. Variables have been grand mean centered",
+                      label="table:model.1",)
+rownames(model.1.tab) <- c("(Intercept)", "Wave 1 HbA1C", "Wave 1 HbA1C, Squared")
+print(model.1.tab)
+@ 
+
+Finally, let's uses this estimated model to predict Wave 2 HbA1C and
+compare the distributions of these predicted value to the actual
+values (Figure \label{fig:predictedActual}). As we can see our model
+does not do a very good predicting the real values.
+
+\begin{figure}  
+<<fig=TRUE, echo=F>>=
+
+
+w2.predicted.density <- density(model.1$fitted)
+
+x.min = min(w2.predicted.density$x, w2.density$x)
+x.max = max(w2.predicted.density$x, w2.density$x)
+
+y.max = max(w2.predicted.density$y, w2.density$y)
+
+plot(c(x.min, x.max), c(0, y.max), type="n", 
+     main="Wave 2 HbA1C, Predicted versus actual",
+     ylab="Density",
+     xlab="HbA1C")
+
+
+polygon(w2.predicted.density, col=rgb(1,0,0,.2))
+
+polygon(w2.density, col=rgb(0,0,1,.2))
+
+@ 
+
+\caption{Predicted versus Actual Distribution of Wave 2 HbA1C measures. Red is predicted, blue is actual}
+\label{plot:predictActual}
+\end{figure}
+
+
+
+
+\end{document}
+
+
+  In the first wave, the interviewer attempted to record all the
+  medications that a respondent took regularly. If a respondent is
+  taking an antidiabetic medication, that is a second measure of
+  whether a respondent had been diagnosed for diabetes.
+
+<<diabetesStatus2, echo=FALSE, results=tex, cache=F>>=
+tab2 <- table(complete$w1.diagnosed.or.meds,
+              complete$w2.status,
+              useNA = "ifany")
+#row.names(tab2) <- c("Nondiabetic", "Diabetic")
+print(xtable(prop.table(tab2, margin=1), caption="Disposition of Diabetic and Nondiabetic Wave 1 Respondents at Wave 2 - Self Reported Diabetes"))
+@
+
+In the first wave, the interviewer attempted to record all the
+medications that a respondent took regularly. If a respondent is
+taking an antidiabetic medication, that is a second measure of whether
+a respondent had been diagnosed for diabetes.
+
+
+
+
+This pattern is not just due to the 
+We should expect that the correlation between HbA1c and mortality
+should go down when we control for diagnosis group, since there should
+be a strong correlation between diagnoses and a measure used to
+diagnose. However, there is substantial variation in HbA1C among
+respondents who share a diagnosis, particularly for diagnosed
+diabetics. I expected that
+
+
+asked to
+
+First, we'll divide the respondents into
+two groups. The first group are respondents who either said they had
+been diagnosed with diabetes or said they took any diabetes
+medications (N=\Sexpr{sum(na.omit(complete$w1.diagnosed.or.meds))}).
+The second group did not report that they had diabetes and did not
+report that they took any medicine for diabetes
+(N=\Sexpr{sum(na.omit(!complete$w1.diagnosed.or.meds))}). There were
+\Sexpr{sum(is.na(complete$w1.diagnosed.or.meds))} respondents that
+could not be classified into either group because of insufficient
+information.
+
+
+
+Respondents who reported having diabetes or taking diabetes medicine
+were more likely to have died by wave 2. This difference is
+statistically significant. Other differences do not appear to be
+statistically significant.
+
+In an analysis not shown, higher levels of HbA1C at wave 1 is
+correlated with a greater chance of dying by wave 2 and a greater
+chance of not responding, even when the respondent was located. A
+further analysis of the interaction between diagnosis status and HbA1C
+at wave 1 did not yield any clear pattern.
+
+<<mlogitData, echo=FALSE, eval=FALSE>>=
+complete.ml <- mlogit.data(complete,
+                           varying=NULL,
+                           choice="w2.status",
+                           shape="wide")
+@
+
+<<mlogitStatus, echo=FALSE, eval=FALSE>>=
+status.ml <- mlogit(w2.status ~ 1|w1.diagnosed.or.meds,
+                     complete.ml,
+                     reflevel="Participated")
+summary(status.ml)
+@
+
+plotOverlap(complete[!complete$w1.diagnosed.or.meds,],
+            "w1.hba1c",
+            "w2.status",
+            levels(complete$w2.status))
+@
+
+
+
+Focusing on the \Sexpr{sum(na.omit(!complete$w1.diagnosed.or.meds))}
+respondents were were undiagnosed at wave 1, \Sexpr{sum(na.omit(complete[!complete$w1.diagnosed.or.meds, "w2.diagnosed.diabetes"] == "YES"))} reported being diagnosed with
+diabetes at wave 2. 
+
+For these previously undiagnosed respondents, higher levels of HbA1C
+is correlated with being diagnosed with diabetes at wave 2.
+
+
+
+

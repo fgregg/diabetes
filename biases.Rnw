@@ -1,0 +1,216 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{url}
+\usepackage{tikz}
+\title{Are there Consistent and Simple Biases Between the Wave 1 and Wave 2 HbA1C Measures}
+\author{Forest Gregg}
+\pgfrealjobname{bias}
+\usepackage[nogin]{Sweave}
+\SweaveOpts{echo=F, width=4.5, height=4.75, prefix.string=/home/fgregg/diabetes/sweave-cache/figs/fig, cache=T, results=hide, keep.source=F}
+<<preamble, cache=FALSE>>=
+setwd('/home/fgregg/diabetes/analyses')
+setCacheDir('/home/fgregg/diabetes/sweave-cache/values')
+#pdf.options(maxRaster=256)
+#options(SweaveHooks=list(fig=function()
+#          par(mar=c(1.1, 1.1, 1.1, 1.1))))
+@
+
+<<setUp, echo=FALSE, cache=F>>=
+library(xtable)
+library(MASS)
+library(plotrix)
+grandMedianCenter <- function(x) {
+  return(x - median(na.omit(x)))
+}
+
+grandMeanCenter <- function(x) {
+  return(x - mean(na.omit(x)))
+}
+
+fm <- function(x) {
+  format(x, big.mark = ",", digits=2)
+}
+@
+
+
+\begin{document}
+\maketitle
+<<loadData, echo=F, cache=F>>=
+source('loadData.R')
+complete <- loadData()
+a1c.long <- longData(complete)
+@ 
+
+In an earlier analysis, we found that on average a respondent's Wave 2
+HbA1C measure was lower than her Wave 1 measure, and that this
+pattern held among subgroups with different diabetes statuses. Most
+troubling, even among nondiabetics, the measure of HbA1C was, on
+average, lower at the second Wave. From previous literature, we
+expected that HbA1C should increase among the nondiabetic population.
+
+\begin{figure}
+<<w1w2Hists, fig=TRUE, height=2.5>>=
+par(mfrow=c(1,2))
+br = seq(4, 15, .5)
+hist(complete$w1.hba1c, main="Wave 1 HbA1C", xlab="HbA1C", breaks=br)
+w2.hba1c.dried <- as.numeric(as.character(complete$w2.hba1c.dried))
+hist(w2.hba1c.dried, main="Wave 2 HbA1C, Dried", xlab="HbA1c", breaks=br)
+par(mfrow=c(1,1))
+@ 
+\caption{Wave 1 and Wave 2 HbA1C frequency histograms. Data are binned at intervals of 0.5 width.}
+\end{figure}
+
+\begin{figure}
+<<bothHist, fig=T, height = 3.5>>=
+multhist(list(complete$w1.hba1c, w2.hba1c.dried), 
+         breaks=br, 
+         probability=TRUE,
+         xlab = "HbA1C, midpoints of bins",
+         ylab = "Density",
+         main = "Wave 1 (Dark) and Wave 2 (Light) HbA1C")
+@
+\caption{Comparison of Wave 1 and Wave 2 HbA1C density histograms. Darker gray is Wave 1; lighter gray is Wave 2. Data are binned at intervals of width 2.5. }
+\end{figure}
+
+The most relevant prior study is a 2008 study by Lydie Pani and her
+co-authors.\footnote{Pani, Lydie N., Leslie Korenda, James B. Meigs,
+  Cynthia Driver, Shadi Chamany, Caroline S. Fox, Lisa Sullivan, Ralph
+  B. D'Agostino, and David M. Nathan. 2008. ``Effect of Aging on A1C
+  Levels in Individuals Without Diabetes.'' \textit{Diabetes Care} 31
+  (10) (October): 1991–1996. \url{doi:10.2337/dc08-0577}.  } Looking
+at longitudinal data from the Framingham Heart Study, they found an
+average annual increase in HbA1c among non-diabetics (Table
+\ref{tab:framingham}). As the Framingham study is a community study,
+we might be cautious of extrapolating these results to the entire
+population. However, it is the best longitudinal study to date and,
+unlike our data, they controlled for drift in their measurements by
+storing long-term reference samples. In any case, the results of the
+Framingham study align with patterns found in national and
+international cross-sectional analyses.
+
+<<framingham, results=tex, cache=F>>=
+increase.hba1c <- c(0.027, 0.032, 0.037, 0.043, 0.024, 0.024, 0.030, 0.026)
+increase.hba1c <- matrix(increase.hba1c)
+
+ages <- c("$<40$", "40--44", "45--49", "50--54", 
+          "55--59", "60--64", "65--69", "$\\geq 70$")
+rownames(increase.hba1c) <- ages
+colnames(increase.hba1c) <- "\\parbox[t]{3cm}{Mean Annual\\\\Increase in HbA1C}"
+
+framingham.tab <- xtable(increase.hba1c,
+                         caption="Mean Annual Increase in HbA1C among Non-Diabetics by Age Group in Framingham Study.", 
+                         label="tab:framingham",
+                         digits=2)
+print(framingham.tab, type="latex", sanitize.text.function=function(x){x})
+
+
+# Longitudinal, 
+@ 
+
+Given that we do not have long-term reference samples, problems in
+measurement are the most likely explanation for our average drop in
+HbA1C. 
+
+Assuming that is true, we might want to know if the differences
+between Wave 1 and Wave 2 measures are relatively simple and
+consistent. If the differences are just due to a consistent shift or
+scaling factor, then we might be able to correct for these difference.
+
+\subsubsection*{Null Model}
+So, let us investigate this. Let's make our life a little easier and
+only consider what is happening to the HbA1c of nondiabetics. From the
+literature we have some expectation about what should happen with this
+population. In contrast, we have no expectations from the literature on how we should expect HbA1C to develop among diabetics. We will define nondiabetics as respondents who 
+\begin{itemize}
+  \item Had HbA1C levels below 6.5 at both waves.
+  \item Not diagnosed with diabetes at either wave
+\end{itemize}
+
+First, we need to posit a model of what we would expect if there were
+no measurement problems between the waves. Let's make the simple
+assumption that, for each respondent, their annual rate of change is
+drawn from a normal distribution. 
+
+Under this model, we would expect that if we modeled Wave 2 Hba1C
+measures as scaled and shifted Wave 1 HbA1c measures, then the
+residuals of that model should follow a normal distribution.
+
+That's exactly what we find (Figures \ref{fig:qqplot} and \ref{fig:hist}).
+
+<<linearModel, cache=F, results=tex>>=
+nondiabetics <- complete[complete$w1.diabetes.status == "Nondiabetic" &
+                         complete$interim.diagnosed == FALSE &
+                         as.numeric(as.character(complete$w2.hba1c.dried)) <= 6.5,]
+
+lin.model <- lm(as.numeric(as.character(w2.hba1c.dried)) ~ grandMeanCenter(w1.hba1c), nondiabetics)
+lin.model.summ <- xtable(summary(lin.model),
+                         caption="Model of Wave 2 Hba1C. Wave 1 HbA1C has been Grand Mean Centered")
+rownames(lin.model.summ) <- c("Intercept", "Wave 1 HbA1C")
+print(lin.model.summ)
+@ 
+
+\begin{figure}[h!]
+  \centering
+<<linQQPlot, cache=F, fig=TRUE>>=
+qqnorm(lin.model$resid)
+qqline(lin.model$resid)
+@ 
+\caption{Quantile-Quantile Plot of Residuals Against a Normal Distribution with Same Mean and Variance}
+\label{fig:qqplot}
+\end{figure}
+
+\begin{figure}[h!]
+<<hist, cache=F, fig=TRUE>>=
+hist(lin.model$resid, nclass=60, main="Histogram of Residuals", xlab="Residuals", probability=TRUE)
+norm.fit <- fitdistr(lin.model$resid, "normal")
+x <- seq(-2, 4, .05)
+lines(x, dnorm(x, norm.fit$estimate[1], norm.fit$estimate[2]))
+@ 
+\caption{Histogram of Residuals}
+\label{fig:hist}
+\end{figure}
+
+\subsubsection*{Diabetics}
+If we try to extend our shift and scale model to `Diabetics,' then our
+residuals very quickly start looking non-normal (Figure
+\ref{fig:qqplotall}). But, it's not all that surprising that the HbA1C
+of diabetics should follow a different course.
+
+<<linearModelAll, cache=F>>=
+lin.model <- lm(as.numeric(as.character(w2.hba1c.dried)) ~ grandMeanCenter(w1.hba1c), complete)
+@ 
+
+\begin{figure}
+<<linQQPlotAll, cache=F, fig=TRUE>>=
+qqnorm(lin.model$resid)
+qqline(lin.model$resid)
+@ 
+\caption{Quantile-Quantile Plot of Residuals Against a Normal Distribution with Same Mean and Variance, including `diabetics'}
+\label{fig:qqplotall}
+\end{figure}
+
+\subsubsection*{Discussion}
+So, what are we to make of the fact that, for nondiabetics, a scale
+and shift model seems to fit the differences between Wave1 and Wave2
+HbA1C very well?
+
+If we felt confident that the results of Framingham study could be
+applied to the NSHAP sample, we could transform our data so that
+distribution of our longitudinal changes matches their changes. 
+
+That's a big if.
+
+
+
+
+
+
+
+
+
+
+
+
+
+\end{document}
+       

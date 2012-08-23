@@ -1,0 +1,10 @@
+*.png
+*.aux
+*.log
+*.map
+*.*~
+*.tex
+*.pdf
+*.*#
+*.html
+*.docx
