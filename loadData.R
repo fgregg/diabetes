@@ -107,13 +107,12 @@ loadData <- function() {
                           "w2.blood.spot",
                           "w2.num.blood.spots",
                           "w2.date",
-                          "w2.age",
+                          "w2.age"
                           )
   
   diabetes.w2$wave.2 = TRUE
   diabetes.w2$w2.field.investigator <- factor(diabetes.w2$w2.field.investigator)
-
-
+  diabetes.w2$w2.date <- as.Date(diabetes.w2$w2.date, "%m/%d/%Y")
 
   diabetes.w2$w2.blood.spot.intro <- factor(diabetes.w2$w2.blood.spot.intro,
                                             labels=c("partial interview",
@@ -169,7 +168,7 @@ loadData <- function() {
   wave2.a1c$w2.hba1c.dried <- as.numeric(as.character(wave2.a1c$w2.hba1c.dried))
   wave2.a1c$w2.hba1c.whole <- as.numeric(as.character(wave2.a1c$w2.hba1c.whole))
 
-
+  wave2.a1c$w2.hba1c.assay.date <- as.Date(as.character(wave2.a1c$w2.hba1c.assay.date), "%m/%d/%Y")
   ######
   # Demographics
   w1.demographics <- wave1[, c("su_id",
@@ -224,7 +223,8 @@ loadData <- function() {
   # Comorbidities
 
   # Wave 2 Variables
-  w2.morbidities <- c('hrtattack', # HAS A DOCTOR EVER TOLD YOU THAT
+  w2.morbid.vars <- c('SU_ID',
+                      'hrtattack', # HAS A DOCTOR EVER TOLD YOU THAT
                                    # YOU HAD a heart attack or
                                    # myocardial infarction?
                       'arthritis', # Arthritis
@@ -250,27 +250,100 @@ loadData <- function() {
                                     #  blood pressure or hypertension?
                       )
 
-  # Wave 1 Morbidities
-  w1.morbidities <- c('hrtprob', #ever told by doctor that he/she had
-                                 #heart attack?
+  w2.morbidities <- wave2[, w2.morbid.vars]
+  names(w2.morbidities) <- c('subject.id',
+                             'w2.heart.attack',
+                             'w2.arthritis',
+                             'w2.osteo.or.rheu.arthritis',
+                             'w2.emphysema.or.asthma',
+                             'w2.stroke',
+                             'w2.diabetes',
+                             'w2.skin.cancer',
+                             'w2.other.cancer',
+                             'w2.hypertension')
+                             
+                             
 
+  # Wave 1 Morbidities
+  w1.morbid.vars <- c('su_id', 
+                      'hrtprob', #ever told by doctor that he/she had
+                                 #heart attack?
                       'conditns_1', #ever had arthritis
                       'conditns_2', #ever had ulcers
-                      'conditns_3', #ever had empysema (not in CI)
+                      'conditns_3', #ever had emphysema (not in CI)
                       'conditns_4', #ever had asthma
                       'conditns_5', #ever had stroke
                       'conditns_6', #ever had hypertension
                       'conditns_7', #ever had diabetes
                       'conditns_13', #ever had skin cancer
                       'conditns_14', #ever had other cancer
-                      'conditns_17', #ever had enlarged prostate
+                      'conditns_17' #ever had enlarged prostate
                       )
+
+  w1.morbidities <- wave1[, w1.morbid.vars]
+  names(w1.morbidities) <- c('subject.id',
+                             'w1.heart.attack',
+                             'w1.arthritis',
+                             'w1.ulcers',
+                             'w1.emphysema',
+                             'w1.asthma',
+                             'w1.stroke',
+                             'w1.hypertension',
+                             'w1.diabetes',
+                             'w1.skin.cancer',
+                             'w1.other.cancer',
+                             'w1.enlarged.prostate')
+
+  morbidities <- merge(w1.morbidities,
+                       w2.morbidities,
+                       by = 'subject.id',
+                       all.y = TRUE)
                       
+  everCondition <- function(w1.condition, w2.condition) {
+    ever.condition <- (ifelse(is.na(morbidities[, w1.condition]),
+                             FALSE,
+                             morbidities[, w1.condition] == 'yes')
+                      | morbidities[, w2.condition] == 'YES')
+    return(ever.condition)
+  }
+  
+  morbidities$hypertension <- everCondition('w1.hypertension',
+                                            'w2.hypertension')
+
+  morbidities$heart.attack <- everCondition('w1.heart.attack',
+                                            'w2.heart.attack')
+
+  morbidities$arthritis <- everCondition('w1.arthritis',
+                                         'w2.arthritis')
+
+  morbidities$stroke <- everCondition('w1.stroke',
+                                      'w2.stroke')
+
+  morbidities$cancer <- (ifelse(is.na(morbidities[, 'w1.skin.cancer']),
+                             FALSE,
+                             morbidities[, 'w1.skin.cancer'] == 'yes')
+                         | ifelse(is.na(morbidities[, 'w1.other.cancer']),
+                                  FALSE,
+                                  morbidities[, 'w1.other.cancer'] == 'yes')
+                         | morbidities[, 'w2.skin.cancer'] == 'YES'
+                         | morbidities[, 'w2.other.cancer'] == 'YES')
+
+  morbidities$emphysema.or.asthma <- (ifelse(is.na(morbidities[, 'w1.emphysema']),
+                                  FALSE,
+                             morbidities[, 'w1.emphysema'] == 'yes')
+                         | ifelse(is.na(morbidities[, 'w1.asthma']),
+                                  FALSE,
+                                  morbidities[, 'w1.asthma'] == 'yes')
+                         | morbidities[, 'w2.emphysema.or.asthma'] == 'YES')
+
+  morbidities$w2.comorbidity.index <- rowSums(morbidities[, c("heart.attack",
+                                                              "hypertension",
+                                                              "emphysema.or.asthma",
+                                                              "stroke",
+                                                              "arthritis",
+                                                              "cancer")])
                       
-                      
-                      
-                      
-                      
+  morbidities <- morbidities[, c("subject.id", "w2.comorbidity.index")]
   
 
   ######
@@ -347,6 +420,14 @@ loadData <- function() {
                     demographics,
                     by = "subject.id",
                     all.x = TRUE)
+
+  complete <- merge(complete,
+                    morbidities,
+                    by = "subject.id",
+                    all.x = TRUE)
+                             
+                             
+                             
                     
 
   complete$interim.diagnosed <- with(complete, {
@@ -369,6 +450,8 @@ loadData <- function() {
 
   complete$wave.1[is.na(complete$wave.1)] <- FALSE
   complete$wave.2[is.na(complete$wave.2)] <- FALSE
+
+  #complete$w2.assay.delay <- complete$
 
   return(complete)
 }
