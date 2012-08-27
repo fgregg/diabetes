@@ -36,22 +36,25 @@ main sources of drop-off are subjects refusing to give blood
 ($N=234$), insufficient sample for an assay ($N=42$), and measurement problems ($N=30$).
 
 \begin{figure}[!ht]
-<<sankeySample, fig=TRUE, cache=F, width=5.5, height=2.75>>=
+  \centering
+<<sankeySample, fig=TRUE, cache=F, width=4.5, height=2.5>>=
 par(bty = 'n')
 SankeyR(c(3377), c(1, 4, 234, 9, 16, 4, 3109), "",
-        labels=c("Subjects",
+        labels=c("Subject",
           "Partial Interview",
           "HIV", "Refused",
           "Equipment problem",
           "Tried, Unable to Do",
           "Not Received by Lab",
           "Received by Lab"))
+par(bty = 'o')
 @ 
 \caption{Dropoff of Subjects to Blood Spots Received by Lab}
 \end{figure}
 
 \begin{figure}
-<<sankeyA1C, fig=TRUE, cache=F, width=5.5, height=2.75>>=
+  \centering
+<<sankeyA1C, fig=TRUE, cache=F, width=4.5, height=2.75>>=
 par(bty = 'n')
 SankeyR(c(3377), c(268, 42, 30, 3037), "",
         labels=c("Subjects",
@@ -124,7 +127,7 @@ race.tab <- as.table(cbind(probs, p.values))
 row.names(race.tab) <- c("White", "Black", "Hispanic", "Other")
 colnames(race.tab) <- c("Prob. of HbA1C Meas.", "P Value of Diff. from Whites")
 
-xtable(race.tab, caption="Probability of Having an HbA1C Measure by Ethnic Group")
+print(xtable(race.tab, caption="Probability of Having an HbA1C Measure by Ethnic Group"), table.placement="!h")
  
 @ 
 
@@ -141,7 +144,7 @@ gender.tab <- as.table(cbind(probs, p.values))
 row.names(gender.tab) <- c("Men", "Women")
 colnames(gender.tab) <- c("Prob. of HbA1C Meas.", "P Value of Diff. from Men")
 
-xtable(gender.tab, caption="Probability of Having HbA1C Measure by Gender")
+print(xtable(gender.tab, caption="Probability of Having HbA1C Measure by Gender"), table.placement='!h')
  
 @ 
 
@@ -158,7 +161,7 @@ age.tab <- as.table(cbind(probs, p.values))
 row.names(age.tab) <- c("Respondent of Average Age (72.5)", "Respondent a Std. Dev. Older (80.6)")
 colnames(age.tab) <- c("Prob. of HbA1C Meas.", "P Value of Diff. from Average")
 
-xtable(age.tab, caption = "Probability of Having HbA1C Measure, Association with Age")
+print(xtable(age.tab, caption = "Probability of Having HbA1C Measure, Association with Age"), table.placement="!h")
  
 @ 
 
@@ -175,7 +178,7 @@ comorbid.tab <- as.table(cbind(probs, p.values))
 row.names(comorbid.tab) <- c("Resp. with Median Comorbid. (2)", "Respondent w/ Three Comorbid.")
 colnames(comorbid.tab) <- c("Prob. of HbA1C Meas.", "P Value of Diff. from Median")
 
-xtable(comorbid.tab, caption = "Probability of HbA1C Measure, Association with Comorbidities")
+print(xtable(comorbid.tab, caption = "Probability of HbA1C Measure, Association with Comorbidities"), table.placement='!h')
  
 @ 
 
@@ -199,7 +202,7 @@ diabetes.tab <- as.table(cbind(probs, p.values))
 row.names(diabetes.tab) <- c("Resp. Reports No Diagnoses", "Resp. Reports Diagnoses", "Resp. Reports `Don't Know'", "Resp. Refuses Answer")
 colnames(diabetes.tab) <- c("Prob. of HbA1C Meas.", "P Value of Diff. from Median")
 
-xtable(diabetes.tab, caption="Probability of Having HbA1C Measure by Diabetes Status")
+print(xtable(diabetes.tab, caption="Probability of Having HbA1C Measure by Diabetes Status"), table.placement='!h')
  
 @ 
 
@@ -236,9 +239,32 @@ for (i in 1:nsim) {
 mean(lrt.sim > lrt.observed)
 @
 
-
-
 \newpage
+\section*{Delay to Assay}
+There does not seem to be any relationship between the HbA1C and the length of time between collection of a blood spot and when it is assayed. When we regress the logit of HbA1C against this delay, the coefficient is nearly zero and the p.value is above 0.95.
+
+However, there is one anomaly in this data. Subject 10042271 was
+apparently interviewed on 6/10/2011 (variable `CurrDate'), but her
+blood spot was assayed six months earlier on 12/272010 (variable
+`ASSAY\_DATE'). This subject was removed from the above analysis;
+including her does not change the results substantively.
+\begin{figure}
+  \centering
+<<delay, fig=TRUE>>=
+delay <- as.numeric(complete$w2.hba1c.assay.date - complete$w2.date)
+delay[delay < 0] <- NA
+delay.analysis <- lm(logit(w2.hba1c.whole/100) ~ delay, complete)
+plot(logit(w2.hba1c.whole/100) ~ delay, 
+     complete, 
+     ylab="Logit of HbA1C",
+     xlab="Days from Blood Spot Collection to Assay",
+     main="HbA1C and Assay Delay")
+abline(delay.analysis, col="red")
+@ 
+\caption{HbA1C and Assay Delay, red line is regression line}
+\end{figure}
+\newpage
+
 
 
 
@@ -246,7 +272,10 @@ mean(lrt.sim > lrt.observed)
 \begin{figure}
 <<histW2hbA1C, fig=TRUE>>=
   brks = seq(3.5, 15, 0.5)
-  hist(complete$w2.hba1c.whole, main="Wave 2 HbA1C", xlab="")
+  hist(complete$w2.hba1c.whole, main="Wave 2 HbA1C", xlab="", 
+       breaks=brks, xaxt="n")
+  axis(1, at=brks, cex.axis = .7)
+
 @ 
 \caption{Wave 2 Histogram}
 \end{figure}
