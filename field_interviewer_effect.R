@@ -14,11 +14,12 @@ wave2 <- complete[!is.na(complete$w2.hba1c.whole) &
                   !is.na(complete$ethgrp) &
                   !is.na(complete$gender) &
                   !is.na(complete$w2.age) &
+                  !is.na(complete$w2.comorbidity.index) &
                   !is.na(complete$w2.field.investigator), ]
                    
-model.lm <- lm(logit(w2.hba1c.whole/100) ~ 1 + ethgrp + gender + w2.age,
+model.lm <- lm(logit(w2.hba1c.whole/100) ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index,
                wave2)
-model.lmer <- lmer(logit(w2.hba1c.whole/100) ~ 1 + ethgrp + gender + w2.age +(1|w2.field.investigator),
+model.lmer <- lmer(logit(w2.hba1c.whole/100) ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index + (1|w2.field.investigator),
                 wave2, REML=FALSE)
 
 lrt.observed <- as.numeric(2*(logLik(model.lmer) - logLik(model.lm)))
@@ -27,9 +28,9 @@ nsim <- 999
 lrt.sim <- rep(0, nsim)
 for (i in 1:nsim) {
   y <- unlist(simulate(model.lm))
-  null.model <- lm(y ~ 1 + ethgrp + gender + w2.age, wave2)
+  null.model <- lm(y ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index, wave2)
   summary(null.model)
-  alt.model <- lmer(y ~ 1 + ethgrp + gender + w2.age + (1|w2.field.investigator),
+  alt.model <- lmer(y ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index + (1|w2.field.investigator),
                     wave2,
                     REML=FALSE)
   lrt.sim[i] <- as.numeric(2*(logLik(alt.model) - logLik(null.model)))
