@@ -192,7 +192,7 @@ probs <- expit(c(diabetes$coefficients[1],
 p.values <- c(NA, 
               diabetes$coefficients[2, 4],
               diabetes$coefficients[3, 4],
-              diabetes$coefficients[3, 4]
+              diabetes$coefficients[4, 4]
               )
 
 diabetes.tab <- as.table(cbind(probs, p.values))
@@ -234,8 +234,20 @@ for (i in 1:nsim) {
 }
 
 mean(lrt.sim > lrt.observed)
-@                
+@
 
 
 
+\newpage
+
+
+
+
+\begin{figure}
+<<histW2hbA1C, fig=TRUE>>=
+  brks = seq(3.5, 15, 0.5)
+  hist(complete$w2.hba1c.whole, main="Wave 2 HbA1C", xlab="")
+@ 
+\caption{Wave 2 Histogram}
+\end{figure}
 \end{document}
