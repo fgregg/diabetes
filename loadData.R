@@ -82,6 +82,7 @@ loadData <- function() {
                            "BLDSPOT",
                            "NUM_BS",
                            "CurrDate"
+                           
                          )
                        ]
 
@@ -106,7 +107,8 @@ loadData <- function() {
                           "w2.blood.spot",
                           "w2.num.blood.spots",
                           "w2.date",
-                          "w2.age")
+                          "w2.age",
+                          )
   
   diabetes.w2$wave.2 = TRUE
   diabetes.w2$w2.field.investigator <- factor(diabetes.w2$w2.field.investigator)
@@ -217,7 +219,59 @@ loadData <- function() {
 
   demographics <- rbind(w1.demographics, w2.demographics)
 
-    
+
+  ######
+  # Comorbidities
+
+  # Wave 2 Variables
+  w2.morbidities <- c('hrtattack', # HAS A DOCTOR EVER TOLD YOU THAT
+                                   # YOU HAD a heart attack or
+                                   # myocardial infarction?
+                      'arthritis', # Arthritis
+                      'osteo_rheu', # Which type of arthritis did your
+                                    # doctor tell you that you have,
+                                    # osteo or rheumat
+                      'emphasth', # HAS A DOCTOR TOLD YOU THAT YOU
+                                  # HAVE emphysema, asthma, chronic
+                                  # bronchitis, or ch
+                      'stroke', # Stroke, cerebrovascular accident,
+                                # blood clot or bleeding in
+                      'diabhbs', # {#_since} HAS A DOCTOR TOLD YOU
+                                 # THAT YOU HAVE diabetes mellitus or
+                                 # high blood su
+                      'skincancer', # Skin cancer (including melanoma,
+                                    # basal cell carcenoma, squam,
+                      'othcan', # {#_since} HAS A DOCTOR TOLD YOU THAT
+                                # YOU HAVE cancer (other than skin
+                                # cancer)?
+                      'highblpress' #  Has a medical doctor ever told
+                                    #  you that you have any of the
+                                    #  following conditions? High
+                                    #  blood pressure or hypertension?
+                      )
+
+  # Wave 1 Morbidities
+  w1.morbidities <- c('hrtprob', #ever told by doctor that he/she had
+                                 #heart attack?
+
+                      'conditns_1', #ever had arthritis
+                      'conditns_2', #ever had ulcers
+                      'conditns_3', #ever had empysema (not in CI)
+                      'conditns_4', #ever had asthma
+                      'conditns_5', #ever had stroke
+                      'conditns_6', #ever had hypertension
+                      'conditns_7', #ever had diabetes
+                      'conditns_13', #ever had skin cancer
+                      'conditns_14', #ever had other cancer
+                      'conditns_17', #ever had enlarged prostate
+                      )
+                      
+                      
+                      
+                      
+                      
+                      
+  
 
   ######
   # Dispositions of Wave 1 Subjects at Wave 2
