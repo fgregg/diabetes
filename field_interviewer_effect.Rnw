@@ -1,0 +1,241 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{url}
+\usepackage{endnotes}
+\usepackage{tikz}
+\usepackage{subfigure}
+\usepackage{rotating}
+\pgfrealjobname{field_interviewer}
+\usepackage[nogin]{Sweave}
+\SweaveOpts{echo=F, width=4.5, height=4.75, prefix.string=/home/fgregg/diabetes/sweave-cache/figs/fig, cache=T, results=hide, keep.source=F}
+<<preamble, cache=FALSE>>=
+setwd('/home/fgregg/diabetes/analyses')
+setCacheDir('/home/fgregg/diabetes/sweave-cache/values')
+#pdf.options(maxRaster=256)
+#options(SweaveHooks=list(fig=function()
+#          par(mar=c(1.1, 1.1, 1.1, 1.1))))
+@ 
+<<head, cache=F>>=
+library(lme4)
+library(xtable)
+source('loadData.R')
+source('Sankey.R')
+logit <- function(x) { log(x) - log(1-x) }
+expit <- function(x) { exp(x) / (1 + exp(x)) }
+
+@ 
+
+<<loadData>>=
+complete <- loadData()
+@ 
+
+\begin{document}
+\section*{Missing Values}
+Of $3,377$ subjects, we have HbA1C measures for $3,037$. The three
+main sources of drop-off are subjects refusing to give blood
+($N=234$), insufficient sample for an assay ($N=42$), and measurement problems ($N=30$).
+
+\begin{figure}[!ht]
+<<sankeySample, fig=TRUE, cache=F, width=5.5, height=2.75>>=
+par(bty = 'n')
+SankeyR(c(3377), c(1, 4, 234, 9, 16, 4, 3109), "",
+        labels=c("Subjects",
+          "Partial Interview",
+          "HIV", "Refused",
+          "Equipment problem",
+          "Tried, Unable to Do",
+          "Not Received by Lab",
+          "Received by Lab"))
+@ 
+\caption{Dropoff of Subjects to Blood Spots Received by Lab}
+\end{figure}
+
+\begin{figure}
+<<sankeyA1C, fig=TRUE, cache=F, width=5.5, height=2.75>>=
+par(bty = 'n')
+SankeyR(c(3377), c(268, 42, 30, 3037), "",
+        labels=c("Subjects",
+          "No Sample",
+          "No Sample Left",
+          "No Data Recorded",
+          "HbA1C Measured"))
+par(bty = 'o')
+@ 
+\caption{Dropoff of Subjects to HbA1C Measured}
+\end{figure}
+
+\subsection*{Number of Blood Spots}
+Field investigators were supposed to collect five blood spots. Of the
+$3,113$ samples sent by the lab (including the four that were
+apparently lost in transit), $96$\% included five blood spots (table x). 
+
+<<numBloodSpots, cache=F, results=tex>>=
+bs.table <- as.table(table(complete$w2.num.blood.spots)[c('1', '2', '3', '4', '5')])
+bs.xtable <- xtable(bs.table, caption="Frequency of Samples with One through Five Blood Spots")
+names(bs.xtable) <- c("# of Samples")
+print(bs.xtable)
+@ 
+
+As may be expected, samples with fewer blood spots were less likely to
+yield an HbA1C measure.
+
+<<numBloodSpotsXMeasurment, cache=F, results=tex>>=
+bs.x.measure.table <- table(complete$w2.num.blood.spots, complete$w2.hba1c.flag)
+bs.x.measure.table <- as.table(bs.x.measure.table[c('1', '2', '3','4','5'),
+                                                  c("Measured", 
+                                                    "No Data", 
+                                                    "No Sample")])
+xtable(prop.table(bs.x.measure.table, 1) * 100, 
+       digits = 0,
+       caption="Percentage of Blood Spots that Yielded an HbA1C Measure by Number of Bloods Spots on Sample")
+@ 
+
+\subsection*{Selection Bias}
+For a variety of reasons, we do not have a measure of HbA1C for $340$
+subjects. Can we treat that drop-off as random, or is this drop-off
+part of a biased selection process? One way we can proceed is to look
+at whether types of subjects who we expect to differ in HbA1C also
+differ in how likely we are to have a measure of their HbA1C. 
+
+When we do this, we find we are substantially less likely to have
+HbA1C measures from African Americans. It also appears that we are
+less likely to have HbA1C measures from respondents who refused to
+answer questions about whether they were every diagnosed with diabetes
+or high blood sugar. In short, we should not assume that HbA1C
+measures are missing at random.
+
+<<selectionBiasEthnic, results=tex, cache=F>>=
+measured <- ifelse(is.na(complete$'w2.hba1c.flag') & complete$wave.2,
+                   FALSE,
+                   complete$w2.hba1c.flag == 'Measured')
+race <- summary(glm(measured ~ ethgrp, complete, family = "binomial"))
+
+probs <- expit(c(race$coefficients[1],
+                 race$coefficients[1] + race$coefficients[2],
+                 race$coefficients[1] + race$coefficients[3],
+                 race$coefficients[1] + race$coefficients[4]))
+
+p.values <- c(NA, 
+              race$coefficients[2, 4],
+              race$coefficients[3, 4],
+              race$coefficients[4, 4])
+
+race.tab <- as.table(cbind(probs, p.values))
+row.names(race.tab) <- c("White", "Black", "Hispanic", "Other")
+colnames(race.tab) <- c("Prob. of HbA1C Meas.", "P Value of Diff. from Whites")
+
+xtable(race.tab, caption="Probability of Having an HbA1C Measure by Ethnic Group")
+ 
+@ 
+
+<<selectionBiasGender, results=tex, cache=F>>=
+gender <- summary(glm(measured ~ gender, complete, family = "binomial"))
+
+probs <- expit(c(gender$coefficients[1],
+                 gender$coefficients[1] + gender$coefficients[2]))
+
+p.values <- c(NA, 
+              gender$coefficients[2, 4])
+
+gender.tab <- as.table(cbind(probs, p.values))
+row.names(gender.tab) <- c("Men", "Women")
+colnames(gender.tab) <- c("Prob. of HbA1C Meas.", "P Value of Diff. from Men")
+
+xtable(gender.tab, caption="Probability of Having HbA1C Measure by Gender")
+ 
+@ 
+
+<<selectionBiasAge, results=tex, cache=F>>=
+age <- summary(glm(measured ~ scale(w2.age), complete, family = "binomial"))
+
+probs <- expit(c(age$coefficients[1],
+                 age$coefficients[1] + age$coefficients[2]))
+
+p.values <- c(NA, 
+              age$coefficients[2, 4])
+
+age.tab <- as.table(cbind(probs, p.values))
+row.names(age.tab) <- c("Respondent of Average Age (72.5)", "Respondent a Std. Dev. Older (80.6)")
+colnames(age.tab) <- c("Prob. of HbA1C Meas.", "P Value of Diff. from Average")
+
+xtable(age.tab, caption = "Probability of Having HbA1C Measure, Association with Age")
+ 
+@ 
+
+<<selectionBiasCoMorbidity, results=tex, cache=F>>=
+comorbid <- summary(glm(measured ~ I(w2.comorbidity.index - 2), complete, family = "binomial"))
+
+probs <- expit(c(comorbid$coefficients[1],
+                 comorbid$coefficients[1] + comorbid$coefficients[2]))
+
+p.values <- c(NA, 
+              comorbid$coefficients[2, 4])
+
+comorbid.tab <- as.table(cbind(probs, p.values))
+row.names(comorbid.tab) <- c("Resp. with Median Comorbid. (2)", "Respondent w/ Three Comorbid.")
+colnames(comorbid.tab) <- c("Prob. of HbA1C Meas.", "P Value of Diff. from Median")
+
+xtable(comorbid.tab, caption = "Probability of HbA1C Measure, Association with Comorbidities")
+ 
+@ 
+
+
+<<selectionBiasDiabetes, results=tex, cache=F>>=
+diabetes <- summary(glm(measured ~ w2.diagnosed.diabetes, complete, family = "binomial"))
+
+probs <- expit(c(diabetes$coefficients[1],
+                 diabetes$coefficients[1] + diabetes$coefficients[2],
+                 diabetes$coefficients[1] + diabetes$coefficients[3],
+                 diabetes$coefficients[1] + diabetes$coefficients[4]
+                 ))
+
+p.values <- c(NA, 
+              diabetes$coefficients[2, 4],
+              diabetes$coefficients[3, 4],
+              diabetes$coefficients[3, 4]
+              )
+
+diabetes.tab <- as.table(cbind(probs, p.values))
+row.names(diabetes.tab) <- c("Resp. Reports No Diagnoses", "Resp. Reports Diagnoses", "Resp. Reports `Don't Know'", "Resp. Refuses Answer")
+colnames(diabetes.tab) <- c("Prob. of HbA1C Meas.", "P Value of Diff. from Median")
+
+xtable(diabetes.tab, caption="Probability of Having HbA1C Measure by Diabetes Status")
+ 
+@ 
+
+
+<<eval=FALSE>>=
+summary(complete[complete$wave.2, "w2.hba1c.flag"])
+
+wave2 <- complete[!is.na(complete$w2.hba1c.whole) &
+                  !is.na(complete$ethgrp) &
+                  !is.na(complete$gender) &
+                  !is.na(complete$w2.age) &
+                  !is.na(complete$w2.comorbidity.index) &
+                  !is.na(complete$w2.field.investigator), ]
+                   
+model.lm <- lm(logit(w2.hba1c.whole/100) ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index,
+               wave2)
+model.lmer <- lmer(logit(w2.hba1c.whole/100) ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index + (1|w2.field.investigator),
+                wave2, REML=FALSE)
+
+lrt.observed <- as.numeric(2*(logLik(model.lmer) - logLik(model.lm)))
+
+nsim <- 999
+lrt.sim <- rep(0, nsim)
+for (i in 1:nsim) {
+  y <- unlist(simulate(model.lm))
+  null.model <- lm(y ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index, wave2)
+  summary(null.model)
+  alt.model <- lmer(y ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index + (1|w2.field.investigator),
+                    wave2,
+                    REML=FALSE)
+  lrt.sim[i] <- as.numeric(2*(logLik(alt.model) - logLik(null.model)))
+}
+
+mean(lrt.sim > lrt.observed)
+@                
+
+
+
+\end{document}
