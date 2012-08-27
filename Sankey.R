@@ -112,7 +112,9 @@ if(format!="plot"){
 
 # Create plotting window
 par(mar=c(0,0,0,0),oma=c(0,0,0,0))
-plot(0,0,type="n",xlim=c(-1.5,maxx+1.5),ylim=c(miny,maxy),xaxt="n",yaxt="n")
+plot(0,0,type="n",xlim=c(-1,maxx+1.5),ylim=c(miny,maxy),xaxt="n",yaxt="n")
+
+
 
 w = 1 # line width
 
@@ -124,7 +126,7 @@ frInputs = inputs/sum(inputs)
 lines(c(0.1,0,0.05,0,0.4), c(0,0,frInputs[1]/2,frInputs[1],frInputs[1]),lwd=w)
 
 # First input label
-inputLabel = paste(labels[1],": ",inputs[1]," ",unit," (",round(100*frInputs[1],digits=1),"\\%)",sep="")
+inputLabel = paste(labels[1],":\n ",inputs[1]," ",unit," (",round(100*frInputs[1],digits=1),"\\%)",sep="")
 fontsize = max(0.5,frInputs[1]*1)
 text(0, frInputs[1]/2, inputLabel, cex=fontsize, pos=2) # try pos=4
 
@@ -196,7 +198,7 @@ for(i in 1:(length(losses)-1)){
   rI = max(0.07, abs(frLosses[i]/2))
   rE = rI + abs(frLosses[i])
  # Determine points on the internal arc
-  arcIx = posTop + rI*sin(seq(0,pi/2,length.out=100))
+  arcIx = posTop + rI*sin(seq(0,pi/2,length.out=100)) 
   arcIy = limTop + rI*(1 - cos(seq(0,pi/2,length.out=100)))
  # Determine points on the internal arc
   arcEx = posTop + rE*sin(seq(0,pi/2,length.out=100));
@@ -219,13 +221,13 @@ for(i in 1:(length(losses)-1)){
   txtX = posTop + rI + frLosses[i]/2
   txtY = limTop + rI + arTop + 0.05
   fullLabel = paste(labels[i+length(inputs)],": ",losses[i]," ",unit," (",round(100*frLosses[i],digits=1),"\\%)",sep="")
-  fontsize = max(0.66,frLosses[i]*1)
-  text(txtX, txtY, fullLabel, cex=fontsize, pos=4, srt=90, offset=0.1)
+  fontsize = max(0.75,frLosses[i]*1)
+  text(txtX, txtY, fullLabel, cex=fontsize, pos=4, srt=35, offset=0.1)
 
  # Save new position of arrow top
   limTop = limTop - frLosses[i]
  # Advance to new separation point
-  newPos = posTop + rE + 0.01
+  newPos = posTop + rE + 0.1
  # Draw top line to new separation point
   lines(c(posTop,newPos), c(limTop,limTop), lwd=w)
  # Save new advancement point
@@ -249,7 +251,7 @@ for(i in 1:(length(losses)-1)){
 newPos = newPos + 0.8*(frLosses[length(frLosses)])
 
 # Last loss label
-lossLabel = paste(labels[length(labels)],": ",losses[length(losses)]," ",unit," (",round(100*frLosses[length(losses)],digits=1),"\\%)",sep="")
+lossLabel = paste(labels[length(labels)],":\n",losses[length(losses)]," ",unit," (",round(100*frLosses[length(losses)],digits=1),"\\%)",sep="")
 fontsize = max(0.5,frLosses[length(losses)]*1)
 text(newPos+0.05, limTop-frLosses[length(frLosses)]/2, lossLabel, cex=fontsize, pos=4) # try pos=4
 
