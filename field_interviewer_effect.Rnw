@@ -38,8 +38,19 @@ main sources of drop-off are subjects refusing to give blood
 \begin{figure}[!ht]
   \centering
 <<sankeySample, fig=TRUE, cache=F, width=4.5, height=2.5>>=
+blood.spot.status <- table(complete[complete$wave.2, "w2.hba1c.flag"])
+
 par(bty = 'n')
-SankeyR(c(3377), c(1, 4, 234, 9, 16, 4, 3109), "",
+SankeyR(c(sum(blood.spot.status)), 
+          c(blood.spot.status['Partial interview'],
+            blood.spot.status['HIV'],
+            blood.spot.status['Refused'],
+            blood.spot.status['Equipment problem'],
+            blood.spot.status['Tried, unable to do'],
+            blood.spot.status['Not recieved'],
+            sum(blood.spot.status[c('No Sample', 'No Data', 'Measured')])
+            ),
+          "",
         labels=c("Subject",
           "Partial Interview",
           "HIV", "Refused",
@@ -56,7 +67,17 @@ par(bty = 'o')
   \centering
 <<sankeyA1C, fig=TRUE, cache=F, width=4.5, height=2.75>>=
 par(bty = 'n')
-SankeyR(c(3377), c(268, 42, 30, 3037), "",
+SankeyR(c(sum(blood.spot.status)), 
+        c(sum(blood.spot.status[c("Partial interview",
+                             "HIV",
+                              "Refused",
+                             "Equipment problem",
+                             "Tried, unable to do",
+                             "Not recieved")]),
+          blood.spot.status['No Sample'],
+          blood.spot.status['No Data'],
+          blood.spot.status['Measured']),
+        "",
         labels=c("Subjects",
           "No Sample",
           "No Sample Left",
@@ -207,7 +228,8 @@ print(xtable(diabetes.tab, caption="Probability of Having HbA1C Measure by Diabe
 @ 
 
 
-<<eval=FALSE>>=
+
+<<eval=TRUE>>=
 summary(complete[complete$wave.2, "w2.hba1c.flag"])
 
 wave2 <- complete[!is.na(complete$w2.hba1c.whole) &
@@ -216,11 +238,15 @@ wave2 <- complete[!is.na(complete$w2.hba1c.whole) &
                   !is.na(complete$w2.age) &
                   !is.na(complete$w2.comorbidity.index) &
                   !is.na(complete$w2.field.investigator), ]
-                   
-model.lm <- lm(logit(w2.hba1c.whole/100) ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index,
-               wave2)
-model.lmer <- lmer(logit(w2.hba1c.whole/100) ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index + (1|w2.field.investigator),
+@ 
+<<eval=FALSE>>=
+model.lmer <- lmer(logit(w2.hba1c.whole/100) ~ 1 + scale(unclass(ethgrp)) + scale(unclass(gender)) + scale(w2.age) + scale(w2.comorbidity.index) + (1|w2.field.investigator),
                 wave2, REML=FALSE)
+
+                   
+model.lm <- lm(logit(w2.hba1c.whole/100) ~ 1 + scale(unclass(ethgrp)) + scale(unclass(gender)) + scale(w2.age) + scale(w2.comorbidity.index),
+               wave2)
+
 
 lrt.observed <- as.numeric(2*(logLik(model.lmer) - logLik(model.lm)))
 
@@ -228,9 +254,9 @@ nsim <- 999
 lrt.sim <- rep(0, nsim)
 for (i in 1:nsim) {
   y <- unlist(simulate(model.lm))
-  null.model <- lm(y ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index, wave2)
+  null.model <- lm(y ~ 1 + ethgrp + gender + scale(w2.age) + scale(w2.comorbidity.index), wave2)
   summary(null.model)
-  alt.model <- lmer(y ~ 1 + ethgrp + gender + w2.age + w2.comorbidity.index + (1|w2.field.investigator),
+  alt.model <- lmer(y ~ 1 + ethgrp + gender + scale(w2.age) + scale(w2.comorbidity.index) + (1|w2.field.investigator),
                     wave2,
                     REML=FALSE)
   lrt.sim[i] <- as.numeric(2*(logLik(alt.model) - logLik(null.model)))
@@ -238,6 +264,218 @@ for (i in 1:nsim) {
 
 mean(lrt.sim > lrt.observed)
 @
+
+
+\section*{Field Interviewer Effects}
+Through their practice with the survey instruments and rapport with
+subjects, field interviewers may differ in how effective they are in
+getting permission to take a subject's blood and how successful they
+are in collecting a good blood sample. We would like to how much field
+interviewers influence collection rates.
+
+However, subjects are not randomly assigned to field-interviewers so
+we if we try to estimate the influence of field investigators we
+should expect confounding. 
+
+Fortunately, we have a belief that the field interviewer should not
+influence the HbA1C value of an individual assays.  If we can control
+for potentially confounding factors, so that our model does not
+estimate that field interviewers influence the value of HbA1C, then we
+may have more confidence in a similar model of the influence of field
+interviewers on collection.
+
+\subsection*{Field Investigator `Effect' on HbA1c'}
+<<uncontrolledFI>>=
+model.lmer <- lmer(logit(w2.hba1c.whole/100) ~ 1  + (1|w2.field.investigator),
+                wave2, REML=FALSE)
+max.effect <- (fixef(model.lmer)['(Intercept)'] 
+               + max(ranef(model.lmer)$w2.field.investigator))
+max.effect <- expit(max.effect) * 100 
+min.effect <- (fixef(model.lmer)['(Intercept)']  
+               + min(ranef(model.lmer)$w2.field.investigator))
+min.effect <- expit(min.effect) * 100
+@ 
+
+First, we'll estimate a model of the field interviewer effect without
+any controls.  Under this model, if we assigned a random respondent 
+to the field investigator with the most positive effect,
+the respondent's HbA1C would be expected to be
+\Sexpr{round(max.effect,1)}, but if that respondent was assigned to
+the field investigator with the most negative effect, the respondent's
+HbA1C would be measured at \Sexpr{round(min.effect,1)}. For reference,
+the standard deviation of Wave 2 HbA1C is about
+\Sexpr{round(sd(na.omit(complete$w2.hba1c.whole), 2))}, so the
+estimated field investigator effects are quite substantial. These
+effects are also statistically significant beyond the 0.01 level.
+
+Now, let's attempt to control for potential confounders. We'll
+statistically control for gender, race and ethnic group (White, Black,
+Non-Black Hispanic, Other), age, and health.\footnote{The health
+  measure is a count of positive responses to questions about whether
+  the subject has had a heart attack, stroke, arthritis, hypertension,
+  cancer, and empysema or asthma}. Also, while we don't think a field
+interviwere can effect the HbA1C value of a collected blood spot, they
+could affect the expected HbA1C value if they are less likely to
+collect blood spots from subjects with higher or lower HbA1C
+levels. We will attempt to control for this potential censoring by
+including the proportion of a HbA1C measures a field investigators
+yields in the model.
+
+<<controlledFI>>=
+model.lmer <- lmer(logit(w2.hba1c.whole/100) ~  (1 + scale(unclass(ethgrp)) 
+                                                 + scale(unclass(gender)) 
+                                                 + scale(w2.age) 
+                                                 + scale(w2.comorbidity.index)
+                                                 + scale(w2.fi.prop.hba1c.measured)
+                                                 + (1|w2.field.investigator)
+                                                 ),
+                   wave2, REML=FALSE)
+
+max.effect <- (fixef(model.lmer)['(Intercept)'] 
+               + max(ranef(model.lmer)$w2.field.investigator))
+max.effect <- expit(max.effect) * 100 
+min.effect <- (fixef(model.lmer)['(Intercept)'] 
+               + min(ranef(model.lmer)$w2.field.investigator))
+min.effect <- expit(min.effect) * 100
+
+model.lm <- lm(logit(w2.hba1c.whole/100) ~  (1 + scale(unclass(ethgrp)) 
+                                             + scale(unclass(gender)) 
+                                             + scale(w2.age) 
+                                             + scale(w2.comorbidity.index)
+                                             + scale(w2.fi.prop.hba1c.measured)
+                                             ),
+               wave2)
+
+lrt.observed <- as.numeric(2*(logLik(model.lmer) - logLik(model.lm)))
+
+nsim <- 999
+lrt.sim <- rep(0, nsim)
+for (i in 1:nsim) {
+  y <- unlist(simulate(model.lm))
+  null.model <- lm(y ~ (1 + scale(unclass(ethgrp)) 
+                        + scale(unclass(gender)) 
+                        + scale(w2.age) 
+                        + scale(w2.comorbidity.index)
+                        + scale(w2.fi.prop.hba1c.measured)
+                        ),
+                   wave2)
+  
+  alt.model <- lmer(y ~ (1 + scale(unclass(ethgrp)) 
+                         + scale(unclass(gender)) 
+                         + scale(w2.age) 
+                         + scale(w2.comorbidity.index)
+                         + scale(w2.fi.prop.hba1c.measured)
+                         + (1|w2.field.investigator)
+                         ),
+                    wave2, REML=FALSE)
+
+  lrt.sim[i] <- as.numeric(2*(logLik(alt.model) - logLik(null.model)))
+}
+
+mean(lrt.sim > lrt.observed)
+
+@ 
+
+Under this model, if we assigned our random subject to our extreme field
+investigators, we should expect HbA1C measures of
+\Sexpr{round(max.effect,1)} and \Sexpr{round(min.effect,1)}. Our
+attempt at control have narrowed the size of the estimated field
+interviewer effects but they remain large and very statistically
+significant.\footnote{Statistical significance was computed by first calculating the log likelihood ratio between a linear model with a field investigator random effect and a nested, null model that excluded the random effect. Second, simulated data was generated from the null model, and a log likelihood ratio was calculated comparing the field investigator and null models on this simulated data. This simulation was done 999 times. The estimate of the p-value is the number of times that the generated log likelihood ratio was bigger than the one calculated from the real data.}
+
+We are faced with two possibilities. Either field investigators really
+can effect the value of an HbA1C assay, or we failed to statistically
+control for the non-random assignment of subjects to field
+investigators. This second possibility seems much more likely.
+
+\subsection*{Field Investigator Effect on Whether HbA1C was Measured}
+While the previous exercise may makes us feel dismal about getting a
+credible estimate of how much field investigators could influence
+whether HbA1C is measured, let's go ahead.
+
+<<whetherFI>>=
+wave2 <- complete[complete$wave.2 &
+                  !is.na(complete$ethgrp) &
+                  !is.na(complete$gender) &
+                  !is.na(complete$w2.age) &
+                  !is.na(complete$w2.comorbidity.index) &
+                  !is.na(complete$w2.field.investigator), ]
+wave2$w2.hba1c.measured <- as.numeric(wave2$w2.hba1c.flag == "Measured")
+model.glm <- glm(w2.hba1c.measured ~ 1, wave2, family="binomial")
+model.glmer <- lmer(w2.hba1c.measured ~ (1 + scale(unclass(ethgrp)) 
+                                         + scale(unclass(gender)) 
+                                         + scale(w2.age) 
+                                         + scale(w2.comorbidity.index) 
+                                         + (1|w2.field.investigator)
+                                         ),
+                   wave2, family="binomial")
+max.effect <- (fixef(model.glmer)['(Intercept)'] 
+               + max(ranef(model.glmer)$w2.field.investigator))
+max.effect <- expit(max.effect) * 100 
+min.effect <- (fixef(model.glmer)['(Intercept)'] 
+               + min(ranef(model.glmer)$w2.field.investigator))
+min.effect <- expit(min.effect) * 100
+@ 
+
+Again controlling for gender, race and ethnicity, age, and health, we
+expect that if we assign the most successful investigator to a random
+recipient, there is a \Sexpr{round(max.effect,2)}\% chance that the
+subject's HbA1C will be measured, but if the `worst' field
+investigator is there is only a \Sexpr{round(min.effect,2)}. The field
+investigator effects are very statistically significant. Of course,
+this is all contingent on believing our model.
+
+<<results=tex, cache=F>>=
+investigator.effects <- ranef(model.glmer)$w2.field.investigator
+investigator.effects <- data.frame(row.names(investigator.effects),
+                                   investigator.effects[,1])
+worst.10 <- investigator.effects[order(investigator.effects[,2]),][1:10,]
+worst.10[,2] <- expit(worst.10[,2] + fixef(model.glmer)['(Intercept)']) 
+worst.10.table <- xtable(data.frame(worst.10),
+                         caption="Most Unsuccesful Field Investigators, Estimated", align="rrl")
+names(worst.10.table) <- c("Field Investigator ID", 
+                           "Expected Chance of Getting HbA1C Measure")
+print(worst.10.table, include.rownames=FALSE)
+@ 
+
+\section*{Heterogenity over field period}
+\begin{figure}
+  \centering
+<<date, fig=TRUE>>=
+complete.loess <- complete[!is.na(complete$w2.date),]
+centered.date <- as.numeric(complete.loess$w2.date 
+                            - mean(complete.loess$w2.date)
+                            )
+                            
+
+fit <- loess(logit(w2.hba1c.whole/100) ~ centered.date, 
+             complete.loess)
+
+
+x.date <- seq(min(complete.loess$w2.date), 
+              max(complete.loess$w2.date), 
+              length=100)
+x <- seq(from=min(centered.date),
+         to=max(centered.date), 
+         length = 100)
+plot(complete.loess$w2.date,
+     complete.loess$w2.hba1c.whole, 
+     col="#00000055",
+     xlab="Field Date",
+     ylab="HbA1C",
+     main="Changes in Average HbA1C over Field Period")
+lines(expit(predict(fit, x))*100 ~ x.date, col="red")
+
+begin <- expit(predict(fit, min(centered.date)))*100
+end <- expit(predict(fit, max(centered.date)))*100
+@ 
+\caption{Field Heterogeneity}
+\end{figure}
+
+There was a small decline in expected HbA1C values over the field
+period. At the beginning of the period, the expected assayed value is \Sexpr{round(begin,2)} and at the end it's \Sexpr{round(end,2)}.
+
+
 
 \newpage
 \section*{Delay to Assay}
@@ -251,15 +489,15 @@ including her does not change the results substantively.
 \begin{figure}
   \centering
 <<delay, fig=TRUE>>=
-delay <- as.numeric(complete$w2.hba1c.assay.date - complete$w2.date)
+delay <- as.numeric(complete$w2.hba1c.assay.date - as.Date(complete$w2.date))
 delay[delay < 0] <- NA
 delay.analysis <- lm(logit(w2.hba1c.whole/100) ~ delay, complete)
-plot(logit(w2.hba1c.whole/100) ~ delay, 
+plot(w2.hba1c.whole ~ delay, 
      complete, 
-     ylab="Logit of HbA1C",
+     ylab="HbA1C",
      xlab="Days from Blood Spot Collection to Assay",
      main="HbA1C and Assay Delay")
-abline(delay.analysis, col="red")
+lines(delay.analysis$model$delay, expit(delay.analysis$fitted)*100,  col="red")
 @ 
 \caption{HbA1C and Assay Delay, red line is regression line}
 \end{figure}

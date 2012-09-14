@@ -69,6 +69,13 @@ loadData <- function() {
                                        c(-Inf,6.0, 7, 8, 9, 10, 11,Inf),
                                        right = FALSE
                                        )
+
+  # The dried blood spots were turned into DCCT/NGSP equivalents with
+  # this equation
+  #
+  # (Dried Bloot Spot Ratio) * 87.6 + 2.27
+  diabetes.w1$w1.hba1c.unregressed <- (diabetes.w1$w1.hba1c.whole - 2.27)/.876
+  
   ######
   # Wave 2 Diabetes Info
   wave2 <- read.dta("../Wave 2/Data/capi/nshapw2_main_results.dta")
@@ -81,13 +88,29 @@ loadData <- function() {
                            "BS_INTRO",
                            "BLDSPOT",
                            "NUM_BS",
-                           "CurrDate"
-                           
+                           "ts5bldspot1a"
                          )
                        ]
 
   # Calculate the Age at Wave 2 For Wave 1 Respondents
-  interview.year <- wave2$CurrYear
+  names(diabetes.w2) <- c("subject.id",
+                          "w2.field.investigator",
+                          "w2.diagnosed.diabetes",
+                          "w2.month.diagnosed",
+                          "w2.year.diagnosed",
+                          "blood.spot.lab.id",
+                          "w2.blood.spot.eligibility",
+                          "w2.blood.spot.collection",
+                          "w2.num.blood.spots",
+                          "w2.date"
+                          )
+  
+  diabetes.w2$wave.2 = TRUE
+
+  diabetes.w2$w2.date <- as.POSIXlt(strptime(diabetes.w2$w2.date,
+                                             "%m/%d/%Y %H:%M:%S %p"))
+
+  interview.year <- diabetes.w2$w2.date$year + 1900
   w1.birth.year <- wave2$PRELOAD_BIRTHYR
 
   w1.birth.year[w1.birth.year <= 0] <- NA
@@ -97,39 +120,25 @@ loadData <- function() {
                                wave2$age)
 
 
-  names(diabetes.w2) <- c("subject.id",
-                          "w2.field.investigator",
-                          "w2.diagnosed.diabetes",
-                          "w2.month.diagnosed",
-                          "w2.year.diagnosed",
-                          "blood.spot.lab.id",
-                          "w2.blood.spot.intro",
-                          "w2.blood.spot",
-                          "w2.num.blood.spots",
-                          "w2.date",
-                          "w2.age"
-                          )
-  
-  diabetes.w2$wave.2 = TRUE
   diabetes.w2$w2.field.investigator <- factor(diabetes.w2$w2.field.investigator)
-  diabetes.w2$w2.date <- as.Date(diabetes.w2$w2.date, "%m/%d/%Y")
 
-  diabetes.w2$w2.blood.spot.intro <- factor(diabetes.w2$w2.blood.spot.intro,
-                                            labels=c("partial interview",
-                                              "hiv",
-                                              "refused",
-                                              "continued"))
 
-  diabetes.w2$w2.blood.spot <- factor(diabetes.w2$w2.blood.spot,
-                                      labels = c("partial",
-                                        "missing",
-                                        "at least one spot",
-                                        "equipment problem",
-                                        "tried, unable to do"))
+  diabetes.w2$w2.blood.spot.eligibility <- factor(diabetes.w2$w2.blood.spot.eligibility,
+                                            labels=c("Partial interview",
+                                              "HIV",
+                                              "Refused",
+                                              "Continued"))
+
+  diabetes.w2$w2.blood.spot.collection <- factor(diabetes.w2$w2.blood.spot.collection,
+                                      labels = c("Partial interview",
+                                        "Missing",
+                                        "At least one spot",
+                                        "Equipment problem",
+                                        "Tried, unable to do"))
 
   diabetes.w2$w2.num.blood.spots <- factor(diabetes.w2$w2.num.blood.spots,
-                                           labels = c("partial",
-                                             "missing",
+                                           labels = c("Partial interview",
+                                             "Missing",
                                              1,
                                              2,
                                              3,
@@ -426,7 +435,7 @@ loadData <- function() {
                     by = "subject.id",
                     all.x = TRUE)
                              
-                             
+  
                              
                     
 
@@ -440,18 +449,55 @@ loadData <- function() {
            FALSE)
   }
                                      )
+
+  complete$w2.hba1c.flag <- with(complete, {
+    ifelse(complete$wave.2,
+           ifelse(is.na(w2.hba1c.flag),
+                  ifelse(w2.blood.spot.collection != "Missing",
+                         as.character(w2.blood.spot.collection),
+                         as.character(w2.blood.spot.eligibility)),
+                  w2.hba1c.flag),
+           NA)
+  }
+                                 )
   
   complete[complete$subject.id %in% c(10025270,
                                       10030930,
                                       10011720,
                                       10037890),
-                                      'w2.hba1c.flag'] <- "Not Recieved"
-  complete$w2.hba1c.flag <- as.factor(complete$w2.hba1c.flag)
+                                      'w2.hba1c.flag'] <- "Not recieved"
 
+  complete$w2.hba1c.flag <- factor(complete$w2.hba1c.flag,
+                                   levels = c("Partial interview",
+                                     "HIV",
+                                     "Refused",
+                                     "Equipment problem",
+                                     "Tried, unable to do",
+                                     "Not recieved",
+                                     "No Sample",
+                                     "No Data",
+                                     "Measured"))
+
+  interviewer.collection <- table(complete$w2.field.investigator,
+                                  complete$w2.hba1c.flag)
+
+  interviewer.collection <- data.frame(row.names(interviewer.collection),
+                                       (interviewer.collection[,'Measured']
+                                        /rowSums(interviewer.collection)
+                                        )
+                                       )
+  names(interviewer.collection) <- c("w2.field.investigator",
+                                     "w2.fi.prop.hba1c.measured")
+
+  complete <- merge(complete,
+                    interviewer.collection,
+                    by="w2.field.investigator",
+                    all.x = TRUE)
+  
   complete$wave.1[is.na(complete$wave.1)] <- FALSE
   complete$wave.2[is.na(complete$wave.2)] <- FALSE
 
-  #complete$w2.assay.delay <- complete$
+
 
   return(complete)
 }
@@ -462,7 +508,7 @@ longData <- function(complete) {
                      "interim.diagnosed", 
                      "w1.diabetes.status",
                      "w1.age"),
-                   measure.vars = c("w1.hba1c", "w2.hba1c.dried"), 
+                   measure.vars = c("w1.hba1c.unregressed", "w2.hba1c.dried"), 
                    variable_name = "wave")
   
   names(a1c.long) <- c("subject.id", 
